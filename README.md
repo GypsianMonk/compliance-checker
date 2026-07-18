@@ -143,7 +143,10 @@ you always have an audit trail even without a LangSmith account.
   `llm_client.analyze`/`recommend` catch any OpenAI error per call —
   an invalid/expired key, no quota, or a network/allowlist issue falls
   back to the offline embedding and rule-based reasoning instead of
-  crashing the whole run.
+  crashing the whole run. Set `REQUIRE_REAL_LLM=true` to disable this
+  (e.g. in the CI job whose whole purpose is proving the real-LLM path
+  works) so a broken key fails loudly instead of silently passing via
+  the fallback.
 
 ## Continuous integration
 

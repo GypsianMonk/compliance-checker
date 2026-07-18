@@ -23,7 +23,7 @@ from typing import List
 
 import chromadb
 
-from config import OPENAI_API_KEY
+from config import OPENAI_API_KEY, REQUIRE_REAL_LLM
 
 _VECTOR_DIM = 512
 _TOKEN_RE = re.compile(r"[a-zA-Z']+")
@@ -95,9 +95,16 @@ def get_embedding_function():
             fn(["connectivity check"])  # fail fast here, not mid-collection-build
             return fn
         except Exception as exc:
-            # Bad/expired key, no quota, no network access, wrong model
-            # access, etc. -- degrade to the offline embedding instead of
-            # crashing the whole run.
+            if REQUIRE_REAL_LLM:
+                # This run is specifically meant to prove the real-LLM
+                # path works (e.g. the CI job dedicated to it) -- don't
+                # mask a broken key/quota/network by silently degrading.
+                raise RuntimeError(
+                    f"REQUIRE_REAL_LLM is set but OpenAI embeddings failed: {exc!r}"
+                ) from exc
+            # Normal/local usage: bad/expired key, no quota, no network
+            # access, wrong model access, etc. -- degrade to the offline
+            # embedding instead of crashing the whole run.
             print(f"[embeddings] OpenAI embeddings unavailable ({exc!r}); "
                   f"falling back to local hashed embeddings.")
             return LocalHashEmbeddingFunction()

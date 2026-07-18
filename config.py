@@ -16,6 +16,13 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 USE_REAL_LLM = bool(OPENAI_API_KEY)
 
+# When true, a failed OpenAI call raises instead of silently falling back
+# to the offline reasoner. Off by default (normal/local usage should
+# degrade gracefully); the CI job that specifically exists to prove the
+# real-LLM path works sets this to "true" so a broken key fails loudly
+# instead of passing by accident via the fallback.
+REQUIRE_REAL_LLM = os.getenv("REQUIRE_REAL_LLM", "false").lower() == "true"
+
 # --- Observability -------------------------------------------------------
 # Native LangSmith support: set these env vars and every LangGraph node
 # is traced automatically, no code changes needed. Both the newer

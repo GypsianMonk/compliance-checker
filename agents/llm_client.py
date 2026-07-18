@@ -12,7 +12,7 @@ regardless of whether a real LLM or the offline fallback is answering.
 
 import json
 
-from config import USE_REAL_LLM, OPENAI_API_KEY, OPENAI_MODEL
+from config import USE_REAL_LLM, OPENAI_API_KEY, OPENAI_MODEL, REQUIRE_REAL_LLM
 from prompts.prompts import COMPLIANCE_ANALYSIS_PROMPT, RECOMMENDATION_PROMPT
 from agents import local_reasoner
 
@@ -22,6 +22,10 @@ def analyze(policy: dict, regulation: dict) -> dict:
         try:
             return _analyze_with_openai(policy, regulation)
         except Exception as exc:
+            if REQUIRE_REAL_LLM:
+                raise RuntimeError(
+                    f"REQUIRE_REAL_LLM is set but the OpenAI analysis call failed: {exc!r}"
+                ) from exc
             print(f"[llm_client] OpenAI analysis call failed ({exc!r}); "
                   f"falling back to local rule-based reasoning for this policy.")
     return local_reasoner.analyze_conflict(policy["text"], regulation["text"])
@@ -32,6 +36,10 @@ def recommend(policy: dict, regulation: dict, reason: str) -> str:
         try:
             return _recommend_with_openai(policy, regulation, reason)
         except Exception as exc:
+            if REQUIRE_REAL_LLM:
+                raise RuntimeError(
+                    f"REQUIRE_REAL_LLM is set but the OpenAI recommendation call failed: {exc!r}"
+                ) from exc
             print(f"[llm_client] OpenAI recommendation call failed ({exc!r}); "
                   f"falling back to local rule-based recommendation.")
     return local_reasoner.recommend_action(policy["id"], reason)
