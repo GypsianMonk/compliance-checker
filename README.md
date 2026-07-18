@@ -1,0 +1,146 @@
+# Automated Compliance Checker
+
+A LangGraph-based agentic pipeline that checks whether a company policy
+conflicts with a new regulation, using a Chroma vector store for
+retrieval and producing a schema-validated JSON verdict, with full
+run tracing for observability.
+
+## Architecture
+
+```
+policies.json ──► Chroma (in-memory) ──► similarity search
+                                              │
+                                              ▼
+                                     ┌── LangGraph ──┐
+                                     │               │
+                              retriever_node   (Step 1: retrieve)
+                                     │
+                              compliance_node  (Step 1: compare policy vs regulation)
+                                     │
+                              auditor_node     (Step 2: verify + format structured JSON)
+                                     │
+                                     ▼
+                         ComplianceReport (Pydantic-validated)
+                                     │
+                                     ▼
+                     output/report.json + output/traces/<trace_id>.jsonl
+```
+
+Each node's inputs, outputs, and latency are captured by `RunTracer`
+(`observability/tracer.py`), so the run is auditable even without any
+external tracing account configured.
+
+## Folder structure
+
+```
+ComplianceChecker/
+├── app.py                    # entry point
+├── config.py                 # env-driven config, no hard-coded secrets
+├── schema.py                 # Pydantic output contract
+├── requirements.txt
+├── policies/policies.json    # sample company policies
+├── vectorstore/
+│   ├── embeddings.py          # OpenAI embeddings (if key set) or offline hashed embedding
+│   └── chroma_store.py        # builds the Chroma collection + similarity search
+├── agents/
+│   ├── retriever.py            # Step 1: fetch relevant policies for a regulation
+│   ├── compliance_agent.py     # Step 1: compare policy vs regulation
+│   ├── auditor.py               # Step 2: verify + produce structured JSON
+│   ├── llm_client.py            # single choke point: real LLM or offline fallback
+│   └── local_reasoner.py        # deterministic offline reasoning fallback
+├── graph/compliance_graph.py    # LangGraph wiring (START -> retriever -> compliance -> auditor -> END)
+├── prompts/prompts.py           # prompt templates for the real-LLM path
+├── observability/tracer.py      # local JSONL tracer + LangSmith integration point
+└── output/
+    ├── report.json               # final structured verdict(s)
+    └── traces/<trace_id>.jsonl   # per-run trace
+```
+
+## Running it
+
+```bash
+pip install -r requirements.txt
+python app.py                 # runs Rule A (required) + Rule B (edge case)
+python app.py --regulation A  # only the required regulation
+```
+
+No API key is required to run the full pipeline: with no
+`OPENAI_API_KEY` set, the Compliance Analyzer and Auditor use a
+deterministic rule-based reasoning fallback (`agents/local_reasoner.py`)
+instead of calling an LLM, and the vector store uses a dependency-free
+hashed bag-of-words embedding (`vectorstore/embeddings.py`) instead of
+OpenAI embeddings. This keeps the prototype 100% free and offline to
+run/grade, per the assignment's cost guide, while exercising the exact
+same retrieval → compare → audit control flow a production version
+would use.
+
+### Using a real LLM
+
+```bash
+export OPENAI_API_KEY=sk-...
+python app.py
+```
+
+This automatically switches both the embeddings and the compliance
+reasoning to real OpenAI calls (`text-embedding-3-small` +
+`gpt-4o-mini` by default, configurable via `OPENAI_MODEL`). No code
+changes needed — `agents/llm_client.py` and
+`vectorstore/embeddings.py` branch on whether the key is present.
+
+### Enabling LangSmith tracing
+
+```bash
+export LANGCHAIN_TRACING_V2=true
+export LANGCHAIN_API_KEY=ls__...
+export LANGCHAIN_PROJECT=compliance-checker   # optional
+python app.py
+```
+
+LangGraph/LangChain pick these up automatically and trace every node
+run to your LangSmith project — no code changes required. The local
+JSONL tracer in `observability/tracer.py` keeps running regardless, so
+you always have an audit trail even without a LangSmith account.
+
+## Sample output (Rule A)
+
+```json
+{
+  "target_regulation": "REG_2026_PR_COMPLIANCE",
+  "conflict_detected": true,
+  "conflicting_policies": [
+    {
+      "policy_id": "policy_001",
+      "reason": "..."
+    }
+  ],
+  "recommended_action": "...",
+  "trace_id": "..."
+}
+```
+
+## Design notes / trade-offs
+
+- **Retrieval narrowing**: rather than an absolute similarity-distance
+  cutoff (hard to tune across embedding backends), the retriever keeps
+  the best match plus anything within a small relative margin of it.
+  This is what correctly narrows "which policy is this regulation
+  actually about" down to one, instead of running every policy through
+  the (more expensive, in production, LLM-backed) comparison step.
+- **Auditor never retrieves**: it only takes the Compliance Analyzer's
+  verdicts and turns them into the schema-validated report, per the
+  assignment's separation of concerns.
+- **Structured output via Pydantic**, not "ask the model for JSON" —
+  guarantees the shape matches the expected output every time.
+- **In-memory only by default**: `CHROMA_PERSIST_DIR` env var can be
+  set to persist the collection to disk if needed.
+
+## Production hardening (out of scope here, noted for completeness)
+
+- Multi-regulation batch processing in one run
+- Multi-agent validation (Compliance + Legal + Security agents) with
+  confidence scores and exact-sentence citations
+- Human-in-the-loop review for low-confidence verdicts
+- Policy/regulation versioning
+- FastAPI endpoint + Docker + CI/CD
+- Postgres + pgvector for durable, scalable storage
+- AuthN/AuthZ and audit logging
