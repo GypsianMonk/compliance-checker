@@ -17,11 +17,30 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 USE_REAL_LLM = bool(OPENAI_API_KEY)
 
 # --- Observability -------------------------------------------------------
-# Native LangSmith support: just set these two env vars and every
-# LangGraph node is traced automatically, no code changes needed.
-#   LANGCHAIN_TRACING_V2=true
-#   LANGCHAIN_API_KEY=ls__...
-LANGSMITH_ENABLED = os.getenv("LANGCHAIN_TRACING_V2", "false").lower() == "true"
+# Native LangSmith support: set these env vars and every LangGraph node
+# is traced automatically, no code changes needed. Both the newer
+# LANGSMITH_* names and the older LANGCHAIN_* names are accepted, since
+# different LangSmith docs/versions use different names for the same
+# variables:
+#   LANGSMITH_TRACING=true          (or LANGCHAIN_TRACING_V2=true)
+#   LANGSMITH_API_KEY=lsv2_...       (or LANGCHAIN_API_KEY=ls__...)
+#   LANGSMITH_PROJECT=my-project     (or LANGCHAIN_PROJECT=...)
+#   LANGSMITH_ENDPOINT=https://...   (or LANGCHAIN_ENDPOINT=...)
+_TRACING_RAW = os.getenv("LANGSMITH_TRACING", os.getenv("LANGCHAIN_TRACING_V2", "false"))
+LANGSMITH_ENABLED = _TRACING_RAW.lower() == "true"
+
+if LANGSMITH_ENABLED:
+    # The LangChain/LangGraph tracer instrumentation reads the LANGCHAIN_*
+    # names specifically, so mirror LANGSMITH_* into LANGCHAIN_* for
+    # anyone who only set the newer names (e.g. via GitHub Actions secrets).
+    os.environ["LANGCHAIN_TRACING_V2"] = "true"
+    for _new, _old in [
+        ("LANGSMITH_API_KEY", "LANGCHAIN_API_KEY"),
+        ("LANGSMITH_PROJECT", "LANGCHAIN_PROJECT"),
+        ("LANGSMITH_ENDPOINT", "LANGCHAIN_ENDPOINT"),
+    ]:
+        if os.getenv(_new) and not os.getenv(_old):
+            os.environ[_old] = os.environ[_new]
 
 # Fallback local tracer (always on) writes a LangSmith-shaped JSONL
 # trace file so a reviewer can inspect the run even with no LangSmith

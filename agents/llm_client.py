@@ -19,13 +19,21 @@ from agents import local_reasoner
 
 def analyze(policy: dict, regulation: dict) -> dict:
     if USE_REAL_LLM:
-        return _analyze_with_openai(policy, regulation)
+        try:
+            return _analyze_with_openai(policy, regulation)
+        except Exception as exc:
+            print(f"[llm_client] OpenAI analysis call failed ({exc!r}); "
+                  f"falling back to local rule-based reasoning for this policy.")
     return local_reasoner.analyze_conflict(policy["text"], regulation["text"])
 
 
 def recommend(policy: dict, regulation: dict, reason: str) -> str:
     if USE_REAL_LLM:
-        return _recommend_with_openai(policy, regulation, reason)
+        try:
+            return _recommend_with_openai(policy, regulation, reason)
+        except Exception as exc:
+            print(f"[llm_client] OpenAI recommendation call failed ({exc!r}); "
+                  f"falling back to local rule-based recommendation.")
     return local_reasoner.recommend_action(policy["id"], reason)
 
 

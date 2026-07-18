@@ -138,6 +138,12 @@ you always have an audit trail even without a LangSmith account.
   guarantees the shape matches the expected output every time.
 - **In-memory only by default**: `CHROMA_PERSIST_DIR` env var can be
   set to persist the collection to disk if needed.
+- **Graceful degradation on real-LLM failures**: `get_embedding_function()`
+  does a live test call before committing to OpenAI embeddings, and
+  `llm_client.analyze`/`recommend` catch any OpenAI error per call —
+  an invalid/expired key, no quota, or a network/allowlist issue falls
+  back to the offline embedding and rule-based reasoning instead of
+  crashing the whole run.
 
 ## Continuous integration
 

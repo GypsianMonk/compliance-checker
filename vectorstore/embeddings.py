@@ -91,8 +91,14 @@ class OpenAIEmbeddingFunction(chromadb.EmbeddingFunction):
 def get_embedding_function():
     if OPENAI_API_KEY:
         try:
-            return OpenAIEmbeddingFunction()
-        except Exception:
-            # Fall back gracefully if the openai package/key isn't usable.
+            fn = OpenAIEmbeddingFunction()
+            fn(["connectivity check"])  # fail fast here, not mid-collection-build
+            return fn
+        except Exception as exc:
+            # Bad/expired key, no quota, no network access, wrong model
+            # access, etc. -- degrade to the offline embedding instead of
+            # crashing the whole run.
+            print(f"[embeddings] OpenAI embeddings unavailable ({exc!r}); "
+                  f"falling back to local hashed embeddings.")
             return LocalHashEmbeddingFunction()
     return LocalHashEmbeddingFunction()
