@@ -1,5 +1,7 @@
 # Automated Compliance Checker
 
+![CI](https://github.com/GypsianMonk/compliance-checker/actions/workflows/ci.yml/badge.svg)
+
 A LangGraph-based agentic pipeline that checks whether a company policy
 conflicts with a new regulation, using a Chroma vector store for
 retrieval and producing a schema-validated JSON verdict, with full
@@ -136,6 +138,15 @@ you always have an audit trail even without a LangSmith account.
   guarantees the shape matches the expected output every time.
 - **In-memory only by default**: `CHROMA_PERSIST_DIR` env var can be
   set to persist the collection to disk if needed.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push/PR to `main`: installs
+dependencies, runs the full pipeline for both regulations (offline
+mode — no API keys needed in CI), asserts the output matches the
+expected schema, regression-checks that Regulation A flags only
+`policy_001` and Regulation B flags only `policy_003`, and uploads
+`output/report.json` + the trace files as a build artifact.
 
 ## Production hardening (out of scope here, noted for completeness)
 

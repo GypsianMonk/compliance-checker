@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  smoke-test:
+    name: Run compliance checker (offline mode)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run full pipeline (Regulation A + B, no API keys required)
+        run: python app.py --regulation all
+
+      - name: Verify structured output matches expected schema
+        run: |
+          python - <<'EOF'
+          import json
+
+          with open("output/report.json") as f:
+              reports = json.load(f)
+
+          required_keys = {
+              "target_regulation",
+              "conflict_detected",
+              "conflicting_policies",
+              "recommended_action",
+              "trace_id",
+          }
+
+          for report in reports:
+              missing = required_keys - report.keys()
+              assert not missing, f"Missing keys in report: {missing}"
+              assert isinstance(report["conflicting_policies"], list)
+
+          # Known-good regression check for the sample data set
+          by_regulation = {r["target_regulation"]: r for r in reports}
+          reg_a = by_regulation.get("REG_2026_PR_COMPLIANCE")
+          if reg_a:
+              flagged = {p["policy_id"] for p in reg_a["conflicting_policies"]}
+              assert reg_a["conflict_detected"] is True
+              assert flagged == {"policy_001"}, f"Expected only policy_001, got {flagged}"
+
+          reg_b = by_regulation.get("REG_2026_SEC_VENDOR")
+          if reg_b:
+              flagged = {p["policy_id"] for p in reg_b["conflicting_policies"]}
+              assert reg_b["conflict_detected"] is True
+              assert flagged == {"policy_003"}, f"Expected only policy_003, got {flagged}"
+
+          print("All schema and regression checks passed.")
+          EOF
+
+      - name: Upload report and traces as build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: compliance-report
+          path: |
+            output/report.json
+            output/traces/
+          retention-days: 14
