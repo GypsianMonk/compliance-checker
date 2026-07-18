@@ -141,12 +141,22 @@ you always have an audit trail even without a LangSmith account.
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on every push/PR to `main`: installs
-dependencies, runs the full pipeline for both regulations (offline
-mode — no API keys needed in CI), asserts the output matches the
-expected schema, regression-checks that Regulation A flags only
-`policy_001` and Regulation B flags only `policy_003`, and uploads
-`output/report.json` + the trace files as a build artifact.
+`.github/workflows/ci.yml` runs on every push/PR to `main` (and can be
+triggered manually), with two jobs:
+
+- **offline-smoke-test**: installs dependencies and runs the full
+  pipeline for both regulations with no API keys — the hashed-embedding
+  + rule-based-reasoning fallback path. Always runs, even on forks/PRs
+  with no secrets configured.
+- **real-llm-test**: runs the same pipeline with `OPENAI_API_KEY` and
+  the `LANGSMITH_*` variables wired in from the repo's encrypted
+  Actions secrets, so it exercises real OpenAI embeddings/reasoning and
+  reports a traced run to LangSmith.
+
+Both jobs run `scripts/verify_report.py`, which asserts the output
+matches the expected schema and regression-checks that Regulation A
+flags only `policy_001` and Regulation B flags only `policy_003`, then
+upload `output/report.json` + the trace files as build artifacts.
 
 ## Production hardening (out of scope here, noted for completeness)
 
