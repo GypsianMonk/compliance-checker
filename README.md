@@ -7,28 +7,31 @@ run tracing for observability.
 
 ## Architecture
 
-```
-policies.json ──► Chroma (in-memory) ──► similarity search
-                                              │
-                                              ▼
-                                     ┌── LangGraph ──┐
-                                     │               │
-                              retriever_node   (Step 1: retrieve)
-                                     │
-                              compliance_node  (Step 1: compare policy vs regulation)
-                                     │
-                              auditor_node     (Step 2: verify + format structured JSON)
-                                     │
-                                     ▼
-                         ComplianceReport (Pydantic-validated)
-                                     │
-                                     ▼
-                     output/report.json + output/traces/<trace_id>.jsonl
-```
+![System architecture](diagrams/architecture.png)
 
 Each node's inputs, outputs, and latency are captured by `RunTracer`
 (`observability/tracer.py`), so the run is auditable even without any
 external tracing account configured.
+
+## Agent workflow
+
+![Agent workflow](diagrams/agent_workflow.png)
+
+The Auditor never queries the vector store or re-retrieves anything —
+it strictly consumes the Compliance Analyzer's verdicts, which keeps
+"finding candidates" and "judging conflict" as separate, independently
+testable responsibilities.
+
+## Why retrieval narrows to the right policy
+
+![Retrieval distances](diagrams/retrieval_distances.png)
+
+These are the actual cosine distances from a live run: for each
+regulation, the retriever keeps the best match plus anything within a
+small relative margin of it — which is what correctly narrows the
+field down to `policy_001` for the PR regulation and `policy_003` for
+the vendor regulation, instead of handing all three policies to the
+(more expensive) comparison step.
 
 ## Folder structure
 
