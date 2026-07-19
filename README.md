@@ -159,8 +159,15 @@ triggered manually), with two jobs:
   with no secrets configured.
 - **real-llm-test**: runs the same pipeline with `OPENAI_API_KEY` and
   the `LANGSMITH_*` variables wired in from the repo's encrypted
-  Actions secrets, so it exercises real OpenAI embeddings/reasoning and
-  reports a traced run to LangSmith.
+  Actions secrets, opportunistically exercising real OpenAI
+  embeddings/reasoning and reporting a traced run to LangSmith when
+  those secrets work. It auto-degrades to the same offline fallback as
+  the other job if they don't (bad key, no billing/quota, etc.), so a
+  broken external credential never blocks CI. Set `REQUIRE_REAL_LLM: "true"`
+  in the workflow's `env:` block instead if you want this job to fail
+  loudly when the real path doesn't work, rather than silently falling
+  back — useful when you're specifically trying to verify the key
+  itself, as opposed to normal day-to-day CI.
 
 Both jobs run `scripts/verify_report.py`, which asserts the output
 matches the expected schema and regression-checks that Regulation A
